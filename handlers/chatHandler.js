@@ -4,10 +4,11 @@ const chatService = require('../services/chatService');
 const connectedUsers = new Map();
 
 function handleChatEvents(io, socket) {
-    const userId = socket.user.user_id;
+    const userId = Number(socket.user.user_id);
     
     // Store user connection
     connectedUsers.set(userId, socket.id);
+    connectedUsers.set(String(userId), socket.id);
     console.log(`User ${userId} connected. Total users: ${connectedUsers.size}`);
 
     // Broadcast user online status
@@ -139,12 +140,16 @@ function handleChatEvents(io, socket) {
      * Handle check online status
      */
     socket.on('check_online', (data) => {
-        const { userIds } = data;
+        const { userIds } = data || {};
         const onlineStatus = {};
         
-        userIds.forEach(id => {
-            onlineStatus[id] = connectedUsers.has(id);
-        });
+        if (Array.isArray(userIds)) {
+            userIds.forEach(id => {
+                const isOnline = connectedUsers.has(Number(id)) || connectedUsers.has(String(id));
+                onlineStatus[id] = isOnline;
+                onlineStatus[String(id)] = isOnline;
+            });
+        }
 
         socket.emit('online_status', onlineStatus);
     });
@@ -154,6 +159,7 @@ function handleChatEvents(io, socket) {
      */
     socket.on('disconnect', () => {
         connectedUsers.delete(userId);
+        connectedUsers.delete(String(userId));
         console.log(`User ${userId} disconnected. Total users: ${connectedUsers.size}`);
         
         // Broadcast user offline status
