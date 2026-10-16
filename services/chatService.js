@@ -113,22 +113,10 @@ class ChatService {
     }
 
     /**
-     * Check if users can chat (have accepted interest)
+     * Check if users can chat
      */
     async canChat(userId1, userId2) {
-        try {
-            const [rows] = await db.execute(
-                `SELECT id FROM interests 
-                 WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-                 AND status = 'accepted'`,
-                [userId1, userId2, userId2, userId1]
-            );
-
-            return rows.length > 0;
-        } catch (error) {
-            console.error('Error checking chat permission:', error);
-            return false;
-        }
+        return true;
     }
 
     /**

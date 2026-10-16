@@ -97,12 +97,8 @@ async function socketAuth(socket, next) {
             return next();
         }
 
-        // 4. Fallback for valid non-empty bearer tokens
-        if (token.length > 5) {
-            socket.user = { user_id: 599 };
-            console.log(`[SOCKET AUTH] Fallback authenticated user ID 599 for bearer token`);
-            return next();
-        }
+        // 4. Reject if nothing worked
+        console.warn('[SOCKET AUTH] Could not authenticate token. Rejecting connection.');
 
         console.warn('[SOCKET AUTH] Invalid token:', token);
         return next(new Error('Authentication failed'));
