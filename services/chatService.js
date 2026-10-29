@@ -135,6 +135,51 @@ class ChatService {
             return null;
         }
     }
+
+    /**
+     * Find recently created message to avoid duplicate DB insertions
+     */
+    async findRecentMessage(senderId, receiverId, message) {
+        try {
+            const [rows] = await db.execute(
+                `SELECT cm.*, 
+                        s.name as sender_name, s.profile_photo as sender_photo,
+                        r.name as receiver_name, r.profile_photo as receiver_photo
+                 FROM chat_messages cm
+                 JOIN users s ON cm.sender_id = s.id
+                 JOIN users r ON cm.receiver_id = r.id
+                 WHERE cm.sender_id = ? AND cm.receiver_id = ? AND cm.message = ?
+                 ORDER BY cm.id DESC LIMIT 1`,
+                [senderId, receiverId, message]
+            );
+
+            if (!rows || rows.length === 0) {
+                return null;
+            }
+
+            const latest = rows[0];
+            const msgTime = new Date(latest.created_at).getTime();
+            const now = Date.now();
+            const diffSec = Math.abs(now - msgTime) / 1000;
+
+            const [diffResult] = await db.execute(
+                `SELECT TIMESTAMPDIFF(SECOND, created_at, NOW()) as sec_diff FROM chat_messages WHERE id = ?`,
+                [latest.id]
+            );
+            const dbSecDiff = diffResult && diffResult[0] && diffResult[0].sec_diff !== null 
+                ? Math.abs(diffResult[0].sec_diff) 
+                : 999;
+
+            if (diffSec <= 60 || dbSecDiff <= 60) {
+                return latest;
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error finding recent message:', error);
+            return null;
+        }
+    }
 }
 
 module.exports = new ChatService();

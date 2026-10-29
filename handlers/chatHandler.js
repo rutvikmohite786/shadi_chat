@@ -19,41 +19,62 @@ function handleChatEvents(io, socket) {
      */
     socket.on('send_message', async (data) => {
         try {
-            const { receiverId, message, messageType = 'text' } = data;
+            const { receiverId, message, messageType = 'text', savedMessage } = data || {};
 
-            if (!receiverId || !message) {
+            if (!receiverId || (!message && !savedMessage)) {
                 socket.emit('error', { message: 'Invalid message data' });
                 return;
             }
 
-            // Check if users can chat
-            const canChat = await chatService.canChat(userId, receiverId);
-            if (!canChat) {
-                socket.emit('error', { 
-                    message: 'You can only chat with users who have accepted your interest.' 
-                });
-                return;
-            }
+            let messageToSend = savedMessage;
 
-            // Save message
-            const savedMessage = await chatService.saveMessage(
-                userId, 
-                receiverId, 
-                message, 
-                messageType
-            );
+            // If message was already saved (e.g. by Laravel REST API), use it directly
+            if (messageToSend && (messageToSend.id || messageToSend.message)) {
+                messageToSend = {
+                    ...messageToSend,
+                    sender_id: Number(messageToSend.sender_id || userId),
+                    receiver_id: Number(messageToSend.receiver_id || receiverId),
+                    message: messageToSend.message || message,
+                    message_type: messageToSend.message_type || messageType,
+                    created_at: messageToSend.created_at || new Date().toISOString()
+                };
+            } else {
+                // Check if message was already created in DB recently (e.g. by Laravel REST API)
+                const recentMessage = await chatService.findRecentMessage(userId, receiverId, message);
+                if (recentMessage) {
+                    messageToSend = recentMessage;
+                } else {
+                    // Check if users can chat
+                    const canChat = await chatService.canChat(userId, receiverId);
+                    if (!canChat) {
+                        socket.emit('error', { 
+                            message: 'You can only chat with users who have accepted your interest.' 
+                        });
+                        return;
+                    }
+
+                    // Save message
+                    messageToSend = await chatService.saveMessage(
+                        userId, 
+                        receiverId, 
+                        message, 
+                        messageType
+                    );
+                }
+            }
 
             // Send to sender
             socket.emit('message_sent', {
                 success: true,
-                message: savedMessage
+                message: messageToSend
             });
 
             // Send to receiver if online
-            const receiverSocketId = connectedUsers.get(receiverId);
+            const targetReceiverId = Number(receiverId);
+            const receiverSocketId = connectedUsers.get(targetReceiverId) || connectedUsers.get(String(targetReceiverId));
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('new_message', {
-                    message: savedMessage
+                    message: messageToSend
                 });
             }
 
