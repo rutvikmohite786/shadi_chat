@@ -1,4 +1,5 @@
 const chatService = require('../services/chatService');
+const { sendChatMessagePush } = require('../utils/expoPushNotification');
 
 // Store connected users: { oduserId: socketId }
 const connectedUsers = new Map();
@@ -60,6 +61,10 @@ function handleChatEvents(io, socket) {
                         message, 
                         messageType
                     );
+
+                    sendChatMessagePush(userId, receiverId, message, messageToSend?.id).catch(err => {
+                        console.error('[CHAT HANDLER] Push notification error:', err.message);
+                    });
                 }
             }
 
